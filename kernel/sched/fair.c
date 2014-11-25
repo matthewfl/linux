@@ -2607,6 +2607,17 @@ static void __clear_buddies_skip(struct sched_entity *se)
 	}
 }
 
+static void __clear_buddies_gang(struct sched_entity *se)
+{
+	for_each_sched_entity(se) {
+		struct cfs_rq *cfs_rq = cfs_rq_of(se);
+		if (cfs_rq->gang == se)
+			cfs_rq->gang = NULL;
+		else
+			break;
+	}
+}
+
 static void clear_buddies(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
 	if (cfs_rq->last == se)
@@ -2617,6 +2628,11 @@ static void clear_buddies(struct cfs_rq *cfs_rq, struct sched_entity *se)
 
 	if (cfs_rq->skip == se)
 		__clear_buddies_skip(se);
+	/*
+	 * Gang buddy, lets be unfair here
+	 */
+	if (cfs_rq->gang)
+		se = cfs_rq->gang;
 }
 
 static __always_inline void return_cfs_rq_runtime(struct cfs_rq *cfs_rq);
@@ -4408,6 +4424,17 @@ static void set_skip_buddy(struct sched_entity *se)
 		cfs_rq_of(se)->skip = se;
 }
 
+static void set_gang_buddy(struct sched_entity *se)
+{
+	if (entity_is_task(se) && unlikely(task_of(se)->policy == SCHED_IDLE))
+		return;
+
+	for_each_sched_entity(se)
+		cfs_rq_of(se)->gang = se;
+}
+
+
+
 /*
  * Preempt the current task with a newly woken task if needed:
  */
@@ -4499,6 +4526,7 @@ static struct task_struct *pick_next_task_fair(struct rq *rq)
 	struct task_struct *p;
 	struct cfs_rq *cfs_rq = &rq->cfs;
 	struct sched_entity *se;
+	struct task_group *tg;
 
 	if (!cfs_rq->nr_running)
 		return NULL;
@@ -4508,6 +4536,13 @@ static struct task_struct *pick_next_task_fair(struct rq *rq)
 		set_next_entity(cfs_rq, se);
 		cfs_rq = group_cfs_rq(se);
 	} while (cfs_rq);
+
+	tg = se->cfs_rq->tg;
+
+	if (tg->gang) {
+		if (!rq->gang_schedule && rq->gang_leader)
+			rq->gang_schedule = tg->gang;
+	}
 
 	p = task_of(se);
 	if (hrtick_enabled(rq))
@@ -4575,7 +4610,7 @@ static bool yield_to_task_fair(struct rq *rq, struct task_struct *p, bool preemp
 		return false;
 
 	/* Tell the scheduler that we'd really like pse to run next. */
-	set_next_buddy(se);
+	set_gang_buddy(se);
 
 	yield_task_fair(rq);
 
@@ -4653,7 +4688,7 @@ static bool yield_to_task_fair(struct rq *rq, struct task_struct *p, bool preemp
  *
  * The adjacency matrix of the resulting graph is given by:
  *
- *             log_2 n     
+ *             log_2 n
  *   A_i,j = \Union     (i % 2^k == 0) && i / 2^(k+1) == j / 2^(k+1)  (6)
  *             k = 0
  *
@@ -4699,7 +4734,7 @@ static bool yield_to_task_fair(struct rq *rq, struct task_struct *p, bool preemp
  *
  * [XXX write more on how we solve this.. _after_ merging pjt's patches that
  *      rewrite all of this once again.]
- */ 
+ */
 
 static unsigned long __read_mostly max_load_balance_interval = HZ/10;
 
@@ -5221,6 +5256,15 @@ static inline void init_sd_lb_stats(struct sd_lb_stats *sds)
 }
 
 /**
+ * domain_first_cpu - Returns the first cpu in the cpumask of a sched_domain.
+ *  <at> domain: The domain whose first cpu is to be returned.
+ */
+static inline unsigned int domain_first_cpu(struct sched_domain *sd)
+{
+	return cpumask_first(sched_domain_span(sd));
+}
+
+/**
  * get_sd_load_idx - Obtain the load index for a given sched domain.
  * @sd: The sched_domain whose load_idx is to be obtained.
  * @idle: The idle status of the CPU for whose sd load_idx is obtained.
@@ -5391,7 +5435,7 @@ void update_group_power(struct sched_domain *sd, int cpu)
 		/*
 		 * !SD_OVERLAP domains can assume that child groups
 		 * span the current group.
-		 */ 
+		 */
 
 		group = child->groups;
 		do {
@@ -7232,6 +7276,86 @@ void init_tg_cfs_entry(struct task_group *tg, struct cfs_rq *cfs_rq,
 	update_load_set(&se->load, NICE_0_LOAD);
 	se->parent = parent;
 }
+
+
+
+static void gang_sched_member(void *info)
+{
+	struct task_group *tg = (struct task_group *) info;
+	struct cfs_rq *cfs_rq;
+	struct rq *rq;
+	int cpu;
+	unsigned long flags;
+
+	cpu  = smp_processor_id();
+	cfs_rq = tg->cfs_rq[cpu];
+	rq = cfs_rq->rq;
+
+	raw_spin_lock_irqsave(&rq->lock, flags);
+
+	/* Check if the runqueue has runnable tasks */
+	if (cfs_rq->nr_running) {
+		struct sched_entity *se = tg->se[cpu];
+
+		/* Make the parent favourable */
+		set_next_buddy(se);
+		set_tsk_need_resched(current);
+	}
+	raw_spin_unlock_irqrestore(&rq->lock, flags);
+}
+
+#define GANG_SCHED_GRANULARITY 8
+
+void gang_sched(struct task_group *tg, struct rq *rq)
+{
+	/* We do not gang sched here */
+	if (rq->gang_leader == 0 || !tg || tg->gang == 0)
+		return;
+
+	/* Yes thats the leader */
+	if (rq->gang_leader == 1) {
+
+		if (!in_interrupt() && !irqs_disabled()) {
+			smp_call_function_many(rq->gang_cpumask,
+					gang_sched_member, tg, 0);
+
+			rq->gang_schedule = 0;
+		}
+
+	} else {
+		/*
+		 * find the gang leader according to the span,
+		 * currently we have it as 8cpu, this can be made
+		 * dynamic
+		 */
+		struct sched_domain *sd;
+		unsigned int count;
+		int i;
+
+		for_each_domain(cpu_of(rq), sd) {
+			count = 0;
+			for_each_cpu(i, sched_domain_span(sd))
+				count++;
+
+			if (count >= GANG_SCHED_GRANULARITY)
+				break;
+		}
+
+		if (sd && cpu_of(rq) == domain_first_cpu(sd)) {
+			printk(KERN_INFO "Selected CPU %d as gang leader\n",
+				cpu_of(rq));
+			rq->gang_leader = 1;
+			rq->gang_cpumask = sched_domain_span(sd);
+		} else if (sd) {
+			/*
+			 * A fellow cpu, it will receive gang
+			 * initiations from the gang leader now
+			 */
+			rq->gang_leader = 0;
+		}
+	}
+}
+
 
 static DEFINE_MUTEX(shares_mutex);
 

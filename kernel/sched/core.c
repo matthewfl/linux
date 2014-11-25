@@ -2190,6 +2190,10 @@ static inline void post_schedule(struct rq *rq)
 		raw_spin_unlock_irqrestore(&rq->lock, flags);
 
 		rq->post_schedule = 0;
+		if (rq->gang_schedule == 1) {
+			struct task_group *tg = task_group(rq->curr);
+			gang_sched(tg, rq);
+		}
 	}
 }
 
@@ -6861,6 +6865,7 @@ void __init sched_init(void)
 		init_dl_rq(&rq->dl, rq);
 #ifdef CONFIG_FAIR_GROUP_SCHED
 		root_task_group.shares = ROOT_TASK_GROUP_LOAD;
+		root_task_group.gang = 0;
 		INIT_LIST_HEAD(&rq->leaf_cfs_rq_list);
 		/*
 		 * How much cpu bandwidth does root_task_group get?
@@ -6901,6 +6906,9 @@ void __init sched_init(void)
 		rq->rd = NULL;
 		rq->cpu_power = SCHED_POWER_SCALE;
 		rq->post_schedule = 0;
+		rq->gang_schedule = 0;
+		rq->gang_leader = -1;
+		rq->gang_cpumask = NULL;
 		rq->active_balance = 0;
 		rq->next_balance = jiffies;
 		rq->push_cpu = 0;
@@ -7700,6 +7708,21 @@ static u64 cpu_shares_read_u64(struct cgroup_subsys_state *css,
 	return (u64) scale_load_down(tg->shares);
 }
 
+
+static int cpu_gang_write_u64(struct cgroup *cgrp, struct cftype *cftype,
+			      u64 shareval)
+{
+	return sched_group_set_gang(cgroup_tg(cgrp), shareval);
+}
+
+static u64 cpu_gang_read_u64(struct cgroup *cgrp, struct cftype *cft)
+{
+	struct task_group *tg = cgroup_tg(cgrp);
+
+	return (u64) tg->gang;
+}
+
+
 #ifdef CONFIG_CFS_BANDWIDTH
 static DEFINE_MUTEX(cfs_constraints_mutex);
 
@@ -7972,6 +7995,11 @@ static struct cftype cpu_files[] = {
 		.name = "shares",
 		.read_u64 = cpu_shares_read_u64,
 		.write_u64 = cpu_shares_write_u64,
+	},
+	{
+		.name = "gang",
+		.read_u64 = cpu_gang_read_u64,
+		.write_u64 = cpu_gang_write_u64,
 	},
 #endif
 #ifdef CONFIG_CFS_BANDWIDTH

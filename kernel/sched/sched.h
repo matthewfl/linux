@@ -225,6 +225,7 @@ struct task_group {
 	/* runqueue "owned" by this group on each cpu */
 	struct cfs_rq **cfs_rq;
 	unsigned long shares;
+	bool gang;
 
 #ifdef	CONFIG_SMP
 	atomic_long_t load_avg;
@@ -294,6 +295,8 @@ extern void init_tg_cfs_entry(struct task_group *tg, struct cfs_rq *cfs_rq,
 			struct sched_entity *parent);
 extern void init_cfs_bandwidth(struct cfs_bandwidth *cfs_b);
 extern int sched_group_set_shares(struct task_group *tg, unsigned long shares);
+extern int sched_group_set_gang(struct task_group *tg, unsigned long gang);
+extern void gang_sched(struct task_group *tg, struct rq *rq);
 
 extern void __refill_cfs_bandwidth_runtime(struct cfs_bandwidth *cfs_b);
 extern void __start_cfs_bandwidth(struct cfs_bandwidth *cfs_b);
@@ -341,7 +344,7 @@ struct cfs_rq {
 	 * 'curr' points to currently running entity on this cfs_rq.
 	 * It is set to NULL otherwise (i.e when none are currently running).
 	 */
-	struct sched_entity *curr, *next, *last, *skip;
+	struct sched_entity *curr, *next, *last, *skip, *gang;
 
 #ifdef	CONFIG_SCHED_DEBUG
 	unsigned int nr_spread_over;
@@ -590,6 +593,9 @@ struct rq {
 	unsigned char idle_balance;
 	/* For active balancing */
 	int post_schedule;
+	int gang_schedule;
+	int gang_leader;
+	struct cpumask *gang_cpumask;
 	int active_balance;
 	int push_cpu;
 	struct cpu_stop_work active_balance_work;
