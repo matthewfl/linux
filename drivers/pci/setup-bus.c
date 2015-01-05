@@ -964,8 +964,13 @@ static int pbus_size_mem(struct pci_bus *bus, unsigned long mask,
 				dev_warn(&dev->dev, "disabling BAR %d: %pR "
 					 "(bad alignment %#llx)\n", i, r,
 					 (unsigned long long) align);
-				r->flags = 0;
-				continue;
+				// mfl: trying to make the alignment smaller,
+				// I guess 4G, as that appears to be the max it will deal
+				// with rather then this 8G that it is currently asking for
+
+				/* r->flags = 0; */
+				/* continue; */
+				order = 11;
 			}
 			size += r_size;
 			if (order < 0)
