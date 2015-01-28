@@ -342,9 +342,20 @@ static int mic_probe(struct pci_dev *pdev,
 		goto release_regions;
 	}
 
+	// the dma mask is already set by this point, but there is the issue that the base address register is still zero
+	// so just need to write some value into the register
+	// and then use that to map the addresses???
 	mdev->aper.pa = pci_resource_start(pdev, mdev->ops->aper_bar);
+	/* if(mdev->aper.pa == NULL) { */
+	/* 	// mfl: change */
+	/* 	// use pci_bus_write_config_* */
+	/* 	// CONFIG_PCI_QUIRKS */
+	/* 	// pci_fixup_device */
+	/* 	pci_bus_write_config_dword(pdev, */
+	/* } */
 	mdev->aper.len = pci_resource_len(pdev, mdev->ops->aper_bar);
 	mdev->aper.va = ioremap_wc(mdev->aper.pa, mdev->aper.len);
+	printk("mfl phi: base: %x, len: %ld, mapped: %x\n, pci_", mdev->aper.pa, mdev->aper.len, mdev->aper.va);
 	if (!mdev->aper.va) {
 		dev_err(&pdev->dev, "Cannot remap Aperture BAR\n");
 		rc = -EIO;

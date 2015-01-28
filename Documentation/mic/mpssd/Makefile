@@ -7,6 +7,7 @@ CFLAGS += $(USERWARNFLAGS) -I. -g -Wall -DDEBUG=$(DEBUG)
 else
 CFLAGS += $(USERWARNFLAGS) -I. -g -Wall
 endif
+CFLAGS += -I ../../../usr/include/
 
 mpssd: mpssd.o sysfs.o
 	$(CC) $(CFLAGS) -o $@ $^ -lpthread

@@ -240,6 +240,19 @@ int __pci_read_base(struct pci_dev *dev, enum pci_bar_type type,
 
 		sz64 = pci_size(l64, sz64, mask64);
 
+		printk("mfl: pci size: %lu, loc: 0x%llx\n", sz64, l64);
+
+		/* if(!l64) { */
+		/* 	// the base address is zero, so try and change that to */
+		/* 	// a higher mem address location */
+		/* 	static u64 base_mem_loc = 0x000000041fdfffff + 1; */
+		/* 	printk("mfl: pci trying to fix base address register\n"); */
+		/* 	l64 = base_mem_loc; */
+		/* 	base_mem_loc += sz64; */
+		/* 	pci_write_config_dword(dev, pos, l64 & 0xffffffff); */
+		/* 	pci_write_config_dword(dev, pos + 4, l64 >> 32); */
+		/* } */
+
 		if (!sz64)
 			goto fail;
 
@@ -250,6 +263,7 @@ int __pci_read_base(struct pci_dev *dev, enum pci_bar_type type,
 
 		if ((sizeof(resource_size_t) < 8) && l) {
 			/* Address above 32-bit boundary; disable the BAR */
+			printk("mfl: pci bar disabled\n");
 			pci_write_config_dword(dev, pos, 0);
 			pci_write_config_dword(dev, pos + 4, 0);
 			region.start = 0;
@@ -296,6 +310,7 @@ int __pci_read_base(struct pci_dev *dev, enum pci_bar_type type,
 
 fail:
 	res->flags = 0;
+	//printk("mfl: pci read base failed\n");
 out:
 	if (!dev->mmio_always_on &&
 	    (orig_cmd & PCI_COMMAND_DECODE_ENABLE))
@@ -305,6 +320,10 @@ out:
 		dev_err(&dev->dev, "reg 0x%x: can't handle 64-bit BAR\n", pos);
 	if (res->flags && !bar_disabled)
 		dev_printk(KERN_DEBUG, &dev->dev, "reg 0x%x: %pR\n", pos, res);
+
+	if(res->flags & IORESOURCE_MEM_64) {
+		printk("mfl: 64bit mem resource\n");
+	}
 
 	return (res->flags & IORESOURCE_MEM_64) ? 1 : 0;
 }

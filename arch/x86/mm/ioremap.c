@@ -87,10 +87,14 @@ static void __iomem *__ioremap_caller(resource_size_t phys_addr,
 	int retval;
 	void __iomem *ret_addr;
 
+	printk("ioremap: running\n");
+
 	/* Don't allow wraparound or zero size */
 	last_addr = phys_addr + size - 1;
-	if (!size || last_addr < phys_addr)
+	if (!size || last_addr < phys_addr) {
+		printk(KERN_WARNING "ioremap: wrap around\n");
 		return NULL;
+	}
 
 	if (!phys_addr_valid(phys_addr)) {
 		printk(KERN_WARNING "ioremap: invalid physical address %llx\n",
@@ -102,8 +106,10 @@ static void __iomem *__ioremap_caller(resource_size_t phys_addr,
 	/*
 	 * Don't remap the low PCI/ISA area, it's always mapped..
 	 */
-	if (is_ISA_range(phys_addr, last_addr))
+	if (is_ISA_range(phys_addr, last_addr)) {
+		printk("ioremap: in isa range\n");
 		return (__force void __iomem *)phys_to_virt(phys_addr);
+	}
 
 	/*
 	 * Don't allow anybody to remap normal RAM that we're using..
@@ -111,8 +117,11 @@ static void __iomem *__ioremap_caller(resource_size_t phys_addr,
 	pfn      = phys_addr >> PAGE_SHIFT;
 	last_pfn = last_addr >> PAGE_SHIFT;
 	if (walk_system_ram_range(pfn, last_pfn - pfn + 1, NULL,
-				  __ioremap_check_ram) == 1)
+														__ioremap_check_ram) == 1) {
+		printk("ioremap: trying to remap normal ram\n");
 		return NULL;
+	}
+
 
 	/*
 	 * Mappings have to be page-aligned
@@ -182,10 +191,13 @@ static void __iomem *__ioremap_caller(resource_size_t phys_addr,
 	WARN_ONCE(iomem_map_sanity_check(unaligned_phys_addr, unaligned_size),
 		  KERN_INFO "Info: mapping multiple BARs. Your kernel is fine.");
 
+	printk("ioremap: success 0x%x\n", ret_addr);
 	return ret_addr;
 err_free_area:
+	printk("ioremap: failed, free area\n");
 	free_vm_area(area);
 err_free_memtype:
+	printk("ioremap: failed, free memtype\n");
 	free_memtype(phys_addr, phys_addr + size);
 	return NULL;
 }
