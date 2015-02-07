@@ -251,6 +251,8 @@ struct task_group {
 #endif
 
 	struct cfs_bandwidth cfs_bandwidth;
+
+	unsigned int gang_sched_group;
 };
 
 #ifdef CONFIG_FAIR_GROUP_SCHED

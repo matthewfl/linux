@@ -6846,6 +6846,8 @@ void __init sched_init(void)
 	INIT_LIST_HEAD(&root_task_group.siblings);
 	autogroup_init(&init_task);
 
+	root_task_group.gang_sched_group = 0;
+
 #endif /* CONFIG_CGROUP_SCHED */
 
 	for_each_possible_cpu(i) {
@@ -7966,6 +7968,23 @@ static u64 cpu_rt_period_read_uint(struct cgroup_subsys_state *css,
 }
 #endif /* CONFIG_RT_GROUP_SCHED */
 
+unsigned int gang_sched_group_count = 1;
+
+static u64 cpu_gang_read_unit(struct cgroup_subsys_state *css,
+															struct cftype *cft) {
+	struct task_group *tg = css_tg(css);
+	return tg->gang_sched_group;
+}
+
+static int cpu_gang_write_uint(struct cgroup_subsys_state *css,
+															 struct cftype *cftype, u64 input) {
+	struct task_group *tg = css_tg(css);
+	// TODO: way to remove from gang sched group
+	BUG_ON(input == 0 && tg->gang_sched_group != 0);
+	tg->gang_sched_group = gang_sched_group_count++;
+	return 0;
+}
+
 static struct cftype cpu_files[] = {
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	{
@@ -8002,6 +8021,11 @@ static struct cftype cpu_files[] = {
 		.write_u64 = cpu_rt_period_write_uint,
 	},
 #endif
+	{
+		.name = "gang_sched",
+		.read_u64 = cpu_gang_read_unit,
+		.write_u64 = cpu_gang_write_uint,
+	},
 	{ }	/* terminate */
 };
 

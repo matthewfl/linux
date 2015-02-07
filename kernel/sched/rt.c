@@ -189,6 +189,8 @@ int alloc_rt_sched_group(struct task_group *tg, struct task_group *parent)
 		init_tg_rt_entry(tg, rt_rq, rt_se, i, parent->rt_se[i]);
 	}
 
+	tg->gang_sched_group = parent->gang_sched_group;
+
 	return 1;
 
 err_free_rq:
