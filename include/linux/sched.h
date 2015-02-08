@@ -2965,13 +2965,14 @@ static inline unsigned long rlimit_max(unsigned int limit)
 
 
 // 50 ms
-#define GANG_SCHED_NS_PER_GROUP 50000000
+// 300 ms
+#define GANG_SCHED_NS_PER_GROUP 300000000
 
 
 extern unsigned int gang_sched_group_count;
 
 static inline unsigned int gang_sched_current_group(void) {
-	struct timespec t = CURRENT_TIME;
+	struct timespec t = __current_kernel_time();
 	s64 time_ns = timespec_to_ns(&t);
 	return (time_ns / GANG_SCHED_NS_PER_GROUP) % gang_sched_group_count;
 }

@@ -2766,6 +2766,8 @@ static struct sched_entity *pick_next_entity(struct cfs_rq *cfs_rq)
 			return NULL;
 		//return NULL;
 	}
+	//if(gang_sched_group_count > 1)
+		//printk("have a task to run %i\n", se->gang_sched_group);
 
 	/*
 	 * Avoid running the skip buddy, if running something else can
@@ -4516,13 +4518,23 @@ static struct task_struct *pick_next_task_fair(struct rq *rq)
 	struct cfs_rq *cfs_rq = &rq->cfs;
 	struct sched_entity *se;
 
-	if (!cfs_rq->nr_running)
+	if (!cfs_rq->nr_running) {
+		/* if(gang_sched_group_count > 1) */
+		/* 	printk("nothing running in fair\n"); */
 		return NULL;
+	}
 
 	do {
 		se = pick_next_entity(cfs_rq);
-		if(!se)
+		if(!se) {
+			// we don't have anything for this group to run
+			// but we want it to exit once this group is done
+			// so put the idle task into the current gang sched group
+			// so when time is out it will "exit"
+			rq->idle->se.gang_sched_group = gang_sched_current_group();
 			return NULL;
+			//return rq->idle;
+		}
 		set_next_entity(cfs_rq, se);
 		cfs_rq = group_cfs_rq(se);
 		/* if(cfs_rq) { */
@@ -4534,6 +4546,7 @@ static struct task_struct *pick_next_task_fair(struct rq *rq)
 	if (hrtick_enabled(rq))
 		hrtick_start_fair(rq, p);
 
+	BUG_ON(!p);
 	return p;
 }
 
@@ -6946,10 +6959,12 @@ static void task_tick_fair(struct rq *rq, struct task_struct *curr, int queued)
 	// use set_tsk_need_resched to kill the current task in the case that we are out of time
 	// for the current set of gang processed tasks
 #ifdef CONFIG_CGROUP_SCHED
-	if(gang_sched_group_count > 1 && !gang_sched_is_curr_group(se)) {
+	if(gang_sched_group_count > 1 && curr == rq->idle)
+		printk("curr is idle\n");
+ 	if(gang_sched_group_count > 1 && !gang_sched_is_curr_group(&curr->se)) {
 		//printk("would resched task\n");
 		//set_tsk_need_resched(curr);
-		//resched_task(curr);
+		resched_task(curr);
 	}
 
 #endif
