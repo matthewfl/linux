@@ -7979,9 +7979,13 @@ static u64 cpu_gang_read_unit(struct cgroup_subsys_state *css,
 static int cpu_gang_write_uint(struct cgroup_subsys_state *css,
 															 struct cftype *cftype, u64 input) {
 	struct task_group *tg = css_tg(css);
+	int i;
 	// TODO: way to remove from gang sched group
 	BUG_ON(input == 0 && tg->gang_sched_group != 0);
 	tg->gang_sched_group = gang_sched_group_count++;
+	for_each_possible_cpu(i) {
+		tg->se[i]->gang_sched_group = tg->gang_sched_group;
+	}
 	return 0;
 }
 

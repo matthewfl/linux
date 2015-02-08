@@ -2751,26 +2751,36 @@ static struct sched_entity *pick_next_entity(struct cfs_rq *cfs_rq)
 	struct sched_entity *se = __pick_first_entity(cfs_rq);
 	struct sched_entity *left = se;
 
+
+	while(se && !gang_sched_is_curr_group(se)) {
+		printk("task failed to have right group %i\n", se->gang_sched_group);
+		se = __pick_next_entity(se);
+	}
+	if(!se) {
+		printk("No task to run atm %i\n", gang_sched_current_group());
+		return NULL;
+	}
+
 	/*
 	 * Avoid running the skip buddy, if running something else can
 	 * be done without getting too unfair.
 	 */
 	if (cfs_rq->skip == se) {
 		struct sched_entity *second = __pick_next_entity(se);
-		if (second && wakeup_preempt_entity(second, left) < 1)
+		if (second && wakeup_preempt_entity(second, left) < 1 && gang_sched_is_curr_group(second))
 			se = second;
 	}
 
 	/*
 	 * Prefer last buddy, try to return the CPU to a preempted task.
 	 */
-	if (cfs_rq->last && wakeup_preempt_entity(cfs_rq->last, left) < 1)
+	if (cfs_rq->last && wakeup_preempt_entity(cfs_rq->last, left) < 1 && gang_sched_is_curr_group(cfs_rq->last))
 		se = cfs_rq->last;
 
 	/*
 	 * Someone really wants this to run. If it's not unfair, run it.
 	 */
-	if (cfs_rq->next && wakeup_preempt_entity(cfs_rq->next, left) < 1)
+	if (cfs_rq->next && wakeup_preempt_entity(cfs_rq->next, left) < 1 && gang_sched_is_curr_group(cfs_rq->next))
 		se = cfs_rq->next;
 
 	clear_buddies(cfs_rq, se);
@@ -4505,8 +4515,13 @@ static struct task_struct *pick_next_task_fair(struct rq *rq)
 
 	do {
 		se = pick_next_entity(cfs_rq);
+		if(!se)
+			return NULL;
 		set_next_entity(cfs_rq, se);
 		cfs_rq = group_cfs_rq(se);
+		/* if(cfs_rq) { */
+		/* 	printk("fair: there is some cfs_rq %p\n", task_of(se)); */
+		/* } */
 	} while (cfs_rq);
 
 	p = task_of(se);
@@ -6925,9 +6940,12 @@ static void task_tick_fair(struct rq *rq, struct task_struct *curr, int queued)
 	// use set_tsk_need_resched to kill the current task in the case that we are out of time
 	// for the current set of gang processed tasks
 #ifdef CONFIG_CGROUP_SCHED
-	if(curr->sched_task_group->gang_sched_group != gang_sched_current_group()) {
-
+	if(gang_sched_group_count > 1 && !gang_sched_is_curr_group(se)) {
+		//printk("would resched task\n");
+		//set_tsk_need_resched(curr);
+		//resched_task(curr);
 	}
+
 #endif
 }
 
@@ -6977,6 +6995,8 @@ static void task_fork_fair(struct task_struct *p)
 	}
 
 	se->vruntime -= cfs_rq->min_vruntime;
+
+	se->gang_sched_group = curr ? curr->gang_sched_group : 0;
 
 	raw_spin_unlock_irqrestore(&rq->lock, flags);
 }
@@ -7241,6 +7261,7 @@ void init_tg_cfs_entry(struct task_group *tg, struct cfs_rq *cfs_rq,
 	/* guarantee group entities always have weight */
 	update_load_set(&se->load, NICE_0_LOAD);
 	se->parent = parent;
+	se->gang_sched_group = parent ? parent->gang_sched_group : 0;
 }
 
 static DEFINE_MUTEX(shares_mutex);
