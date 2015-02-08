@@ -2753,12 +2753,18 @@ static struct sched_entity *pick_next_entity(struct cfs_rq *cfs_rq)
 
 
 	while(se && !gang_sched_is_curr_group(se)) {
-		printk("task failed to have right group %i\n", se->gang_sched_group);
+		//printk("task failed to have right group %i\n", se->gang_sched_group);
 		se = __pick_next_entity(se);
 	}
 	if(!se) {
-		printk("No task to run atm %i\n", gang_sched_current_group());
-		return NULL;
+		//printk("No task to run atm %i\n", gang_sched_current_group());
+		se = __pick_first_entity(cfs_rq);
+		/* // run something that isn't being gang scheduled */
+		while(se && se->gang_sched_group != 0)
+			se = __pick_next_entity(se);
+		if(!se)
+			return NULL;
+		//return NULL;
 	}
 
 	/*

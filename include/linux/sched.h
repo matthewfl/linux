@@ -2984,13 +2984,13 @@ static inline int gang_sched_is_curr_group(struct sched_entity *se) {
 }
 
 
-static inline unsigned int gang_sched_us_till_group(unsigned int group) {
-	// struct timespec t = CURRENT_TIME;
-	// s64 time_ns = timespec_to_ns(&t);
-	// return ((group * GANG_SCHED_NS_PER_GROUP) - (time_ns % (GANG_SCHED_NS_PER_GROUP * gang_sched_group_count))) / 1000;
-	unsigned int curr_group = gang_sched_current_group();
+// static inline unsigned int gang_sched_us_till_group(unsigned int group) {
+// 	// struct timespec t = CURRENT_TIME;
+// 	// s64 time_ns = timespec_to_ns(&t);
+// 	// return ((group * GANG_SCHED_NS_PER_GROUP) - (time_ns % (GANG_SCHED_NS_PER_GROUP * gang_sched_group_count))) / 1000;
+// 	unsigned int curr_group = gang_sched_current_group();
 
-}
+// }
 
 
 #endif

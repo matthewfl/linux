@@ -62,6 +62,7 @@ static void put_prev_task_idle(struct rq *rq, struct task_struct *prev)
 
 static void task_tick_idle(struct rq *rq, struct task_struct *curr, int queued)
 {
+	resched_task(curr);
 }
 
 static void set_curr_task_idle(struct rq *rq)
